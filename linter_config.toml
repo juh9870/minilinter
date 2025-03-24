@@ -1,0 +1,24 @@
+# Files to exclude from linting
+exclude = [""]
+
+[rules.unasserted_arguments]
+# Severity of the rule. Can be "warn" or "error"
+severity = "warn"
+# Whether to require type assertions for the `self` argument
+assert_self = false
+# Whether to require arguments to be asserted by reference (i.e. `@arname`)
+require_ref = true
+# List of exceptions to the rule
+exceptions = ["_"]
+
+[rules.unasserted_returns]
+# Severity of the rule. Can be "warn" or "error"
+severity = "warn"
+# Whether to require type assertions for self returns
+assert_self = false
+# Whether to require returns to be asserted by reference (i.e. `@varname`)
+require_ref = true
+
+[rules.missing_returns]
+# Severity of the rule. Can be "warn" or "error"
+severity = "warn"
