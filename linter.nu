@@ -44,8 +44,39 @@ const DEFAULT_CONFIG = {
         missing_returns: {
             severity: "warn"
         }
+        reserved_identifiers: {
+            severity: "error",
+            reserved: ["string", "number", "map", "list", "funcRef"]
+        }
+        bad_syntax: {
+            severity: "error",
+        }
     }
 }
+
+const SYNTAX_RESERVED_WORDS = [
+    "break",
+    "continue",
+    "else",
+    "end",
+    "for",
+    "function",
+    "if",
+    "in",
+    "isa",
+    "new",
+    "null",
+    "then",
+    "repeat",
+    "return",
+    "while",
+    "and",
+    "or",
+    "not",
+    "true",
+    "false",
+    "self",
+]
 
 def run_checks [] {
     rm -f ./linter_issues.jsonl
@@ -74,11 +105,17 @@ def load_config [file:path merge: bool] {
     if $merge {
         return (parse_config ($DEFAULT_CONFIG | merge deep $data))
     } else {
-        return (parse_config $data)
+        try {
+            return (parse_config $data)
+        } catch {
+            let filename = $env.CURRENT_FILE | path basename
+            print $"(ansi red)Failed to parse config file(ansi reset)\nHelp: if you just updated the linter, you may need to run `(ansi attr_bold)($filename) config write(ansi reset)` to update the config file"
+            exit 1
+        }
     }
 }
 
-def parse_config [data: record<exclude: list<string>, rules: record<unasserted_arguments: record<severity: string, assert_self: bool, require_ref: bool, exceptions: list<string>>, unasserted_returns: record<severity: string, assert_self: bool, require_ref: bool>, missing_returns: record<severity: string>>>] {
+def parse_config [data: record<exclude: list<string>, rules: record<unasserted_arguments: record<severity: string, assert_self: bool, require_ref: bool, exceptions: list<string>>, unasserted_returns: record<severity: string, assert_self: bool, require_ref: bool>, missing_returns: record<severity: string>, reserved_identifiers: record<severity: string, reserved: list<string>>, bad_syntax: record<severity: string>>>] {
     return $data
 }
 
@@ -96,6 +133,7 @@ def lint_file [config: record, issues_file: path] {
         let i = $row.index
         let line = $row.item
 
+        check_assignment $config $lines $i $line $issues_file $allows
         check_funcdef $config $lines $i $line $issues_file $allows
         check_returns $config $lines $i $line $issues_file $allows
         check_missing_returns $config $lines $i $line $issues_file $allows
@@ -119,6 +157,32 @@ const QA_REF_VARNAME_REGEX = $QA_VARNAME_REGEX + '@\s*';
 const RETURN_REGEX = '^return'
 const RETURN_VARIABLE_REGEX = '^return\s*(?:@\s*)?(?<varname>\w+)$'
 const RETURN_REF_VARIABLE_REGEX = '^return\s*@\s*(?<varname>\w+)$'
+const ASSIGNMENT_REGEX = '^(?:(?:locals|globals|outer)\s*\.\s*)?(?<varname>\w+)\s*='
+const ARRAY_ASSIGNMENT_REGEX = '^(?:locals|globals|outer)\s*\[\s*\"(?<varname>\w+)\"\s*\]\s*='
+
+def check_assignment [config: record, lines: list<string>, i: int, line: string, issues_file: path, allows: list<string>] {
+    let assignment_data = $line | parse -r $ASSIGNMENT_REGEX
+
+    let varname: string = if ($assignment_data | is-not-empty) {
+        $assignment_data | get 0.varname | str trim
+    } else {
+        let array_assignment_data = $line | parse -r $ARRAY_ASSIGNMENT_REGEX
+        if ($array_assignment_data | is-empty) {
+            return
+        } else {
+            $array_assignment_data | get 0.varname | str trim
+        }
+    }
+
+    if $varname in $config.rules.reserved_identifiers.reserved {
+        let code = $"reserved_identifiers\(($varname)\)"
+        report_issue $issues_file $i $"variable `($varname)` is a reserved identifier" $code $config.rules.reserved_identifiers.severity
+    }
+    if $varname in $SYNTAX_RESERVED_WORDS {
+        let code = $"bad_syntax.reserved_keyword_assignment\(($varname)\)"
+        report_issue $issues_file $i $"cannot assign to a syntax reserved keyword `($varname)`" $code $config.rules.bad_syntax.severity
+    }
+}
 
 def check_funcdef [config: record, lines: list<string>, i: int, line: string, issues_file: path, allows: list<string>] {
     const fn_regex = 'function\s*\(\s*(?<args>[^)]+?)\s*\)'
@@ -148,6 +212,16 @@ def check_funcdef [config: record, lines: list<string>, i: int, line: string, is
         if ($arg | is-empty) {
             report_issue $issues_file $i "function definition on has an empty argument" "internal" $INTERNAL
         }
+
+        if ($arg != "self") and ($arg in $SYNTAX_RESERVED_WORDS) {
+            let code = $"bad_syntax.reserved_keyword_as_argument\(($arg)\)"
+            report_issue $issues_file $i $"cannot use syntax reserved keyword `($arg)` as a function argument" $code $config.rules.bad_syntax.severity
+        }
+        if $arg in $config.rules.reserved_identifiers.reserved {
+            let code = $"reserved_identifiers\(($arg)\)"
+            report_issue $issues_file $i $"argument `($arg)` is a reserved identifier" $code $config.rules.reserved_identifiers.severity
+        }
+
 
         # check if argument is in exceptions
         if $arg in $config.rules.unasserted_arguments.exceptions {

@@ -41,3 +41,13 @@ Makes the linter check for every function return value to be in form of `return 
 
 ### `missing_returns`
 Checks that every function has a return statement right before `end function`
+
+### `reserved_identifiers`
+Checks for assignments to or usage as function argument of a list of reserved identifiers
+
+The default list consists of identifiers that are used for intrinsic classes in MiniScript, which cause confusing and hard to debug errors when shadowed
+
+### `bad_syntax`
+Checks for a subset of syntax errors that are common in MiniScript
+
+There is no good reason to disable this rule, as any constructs matched by it are already syntax errors or guaranteed irrecoverable runtime errors

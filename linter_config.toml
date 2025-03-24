@@ -22,3 +22,20 @@ require_ref = true
 [rules.missing_returns]
 # Severity of the rule. Can be "warn" or "error"
 severity = "warn"
+
+[rules.reserved_identifiers]
+# Severity of the rule. Can be "warn" or "error"
+severity = "error"
+# List of reserved identifiers
+reserved = [
+    "string",
+    "number",
+    "map",
+    "list",
+    "funcRef",
+]
+
+# There is never a good reason to disable this rule, as it only catched syntax 
+# errors that would prevent the script from running anyway
+[rules.bad_syntax]
+severity = "error"
