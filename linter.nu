@@ -2,20 +2,23 @@
 
 # Lint all miniscript files in the current directory
 def main [--no-report (-R)] {
-    rm -f ./linter_issues.jsonl
-
-    let config = load_config "./linter_config.toml" false
-
-    let files = glob '(?i)./**/*.ms' --exclude $config.exclude
-    for $file in $files {
-        lint_file $config $file
-    }
-
+    run_checks
     if not $no_report {
-        print_issues
+        exit (print_issues)
     }
 }
 
+def "main watch" [--debounce-ms (-d): int = 500] {
+    let run = {||
+        run_checks
+        print_issues
+        print $"\n(date now | format date '%Y-%m-%d %H:%M:%S'): Watching ($env.PWD) for changes... \(press ctrl+c to exit\)"
+    }
+    do $run
+    watch . --glob=**/*.ms -q -d $debounce_ms {|| 
+        do $run
+    }
+}
 
 # Generate (or update) a configuration file
 def "main config write" [] {
@@ -41,6 +44,17 @@ const DEFAULT_CONFIG = {
         missing_returns: {
             severity: "warn"
         }
+    }
+}
+
+def run_checks [] {
+    rm -f ./linter_issues.jsonl
+
+    let config = load_config "./linter_config.toml" false
+
+    let files = glob '(?i)./**/*.ms' --exclude $config.exclude
+    for $file in $files {
+        lint_file $config $file
     }
 }
 
@@ -281,14 +295,14 @@ def print_issues [] {
     let issuesCount = $allIssues | length
     if $issuesCount == 0 {
         print $"(ansi green)No issues found(ansi reset)"
-        exit 0
+        return 0
     } else {
         if $errorsCount > 0 {
             print $"(ansi red)✖ ($issuesCount) problems \(($errorsCount) errors, ($warnsCount) warnings\)(ansi reset)"
-            exit 1
+            return 1
         } else {
             print $"(ansi yellow_bold)!(ansi reset)(ansi yellow) ($issuesCount) problems \(($errorsCount) errors, ($warnsCount) warnings\)(ansi reset)"
-            exit 0
+            return 0
         }
     }
 }
