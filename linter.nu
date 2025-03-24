@@ -89,7 +89,7 @@ const ERROR = "error"
 def lint_file [config: record, issues_file: path] {
     let content = open $issues_file --raw
 
-    let lines = $content | lines
+    let lines = $content | lines | each { str trim }
     mut allows: list<string> = []
 
     for row in ($lines | enumerate) {
@@ -101,7 +101,7 @@ def lint_file [config: record, issues_file: path] {
         check_missing_returns $config $lines $i $line $issues_file $allows
 
         # check for allows
-        let allow = $line | parse -r '^\/\/\s*@allow\s+(?<code>.+?)\s*$'
+        let allow = $line | parse -r '^\/\/\s*@allow\s+(?<code>\S+)'
         if ($allow | is-not-empty) {
             let code = $allow | get 0.code | str trim
             if not ($code | is-empty) {
@@ -116,7 +116,8 @@ def lint_file [config: record, issues_file: path] {
 const QA_ASSERT_REGEX = '^qa.assert';
 const QA_VARNAME_REGEX = '^qa.assert(?:\w+)?\s*\(?\s*';
 const QA_REF_VARNAME_REGEX = $QA_VARNAME_REGEX + '@\s*';
-const RETURN_REGEX = 'return\s*(?:@\s*)?(?<varname>\w+?)'
+const RETURN_REGEX = '^return'
+const RETURN_VARIABLE_REGEX = '^return\s*(?:@\s*)?(?<varname>\w+)$'
 
 def check_funcdef [config: record, lines: list<string>, i: int, line: string, issues_file: path, allows: list<string>] {
     const fn_regex = 'function\s*\(\s*(?<args>[^)]+?)\s*\)'
@@ -159,8 +160,8 @@ def check_funcdef [config: record, lines: list<string>, i: int, line: string, is
 
         # check function body for assertions
         for j in ($i + 1).. {
-            let line = $lines | get $j | str trim
-            if ($line | is-empty) {
+            let line = $lines | get $j
+            if ($line | is-meaningless) {
                 continue
             }
 
@@ -191,8 +192,13 @@ def check_funcdef [config: record, lines: list<string>, i: int, line: string, is
 }
 
 def check_returns [config: record, lines: list<string>, i: int, line: string, issues_file: path, allows: list<string>] {
-    let return_data = $line | parse -r $RETURN_REGEX
+    if $line !~ $RETURN_REGEX {
+        return
+    }
+    let return_data = $line | parse -r $RETURN_VARIABLE_REGEX
     if ($return_data | is-empty) {
+        let code = $"unasserted_returns.not_a_variable"
+        report_issue $issues_file $i $"return statement is not a plain variable return" $code $config.rules.unasserted_returns.severity
         return
     }
 
@@ -207,16 +213,20 @@ def check_returns [config: record, lines: list<string>, i: int, line: string, is
         return
     }
 
+    if $varname == "null" {
+        return
+    }
+
     for j in (0..($i - 1) | each {} | reverse) {
-        let line = $lines | get $j | str trim
-        if ($line | is-empty) {
+        let line = $lines | get $j
+        if ($line | is-meaningless) {
             continue
         }
 
         if $line !~ $QA_ASSERT_REGEX {
             let code = $"unasserted_returns\(($varname)\)"
             if $code not-in $allows {
-                report_issue $issues_file $j $"return variable `($varname)` is not type-checked" $code $config.rules.unasserted_returns.severity
+                report_issue $issues_file $i $"return variable `($varname)` is not type-checked" $code $config.rules.unasserted_returns.severity
             }
             break
         }
@@ -245,8 +255,8 @@ def check_missing_returns [config: record, lines: list<string>, i: int, line: st
     }
 
     for j in (0..($i - 1) | each {} | reverse) {
-        let line = $lines | get $j | str trim
-        if ($line | is-empty) {
+        let line = $lines | get $j
+        if ($line | is-meaningless) {
             continue
         }
 
@@ -261,7 +271,7 @@ def check_missing_returns [config: record, lines: list<string>, i: int, line: st
 }
 
 def report_issue [file: path, line: int, message: string, code: string, severity: string, help?: string] {
-    (({ file: $file, line: $line, message: $message, severity: $severity, code: $code, help: $help } | to json -r) + "\n") | save -a ./linter_issues.jsonl
+    (({ file: $file, line: ($line + 1), message: $message, severity: $severity, code: $code, help: $help } | to json -r) + "\n") | save -a ./linter_issues.jsonl
 }
 
 def print_issues [] {
@@ -309,6 +319,10 @@ def print_issues [] {
 
 def format_row [widths: record, entries: record, separator: string] {
     $entries | items {|k,v| $v | fill -a left -c ' ' -w ($widths | get $k) } | str join $separator
+}
+
+def is-meaningless []: string -> bool {
+  return (($in | is-empty) or ($in | str starts-with "//"))
 }
 
 export def 'merge deep' [other: any]: any -> any {
