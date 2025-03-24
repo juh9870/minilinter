@@ -29,6 +29,7 @@ def "main config write" [] {
 
 const DEFAULT_CONFIG = {
     exclude: ['']
+    abort_functions: ['qa.abort']
     rules: {
         unasserted_arguments: {
             severity: "warn"
@@ -115,7 +116,7 @@ def load_config [file:path merge: bool] {
     }
 }
 
-def parse_config [data: record<exclude: list<string>, rules: record<unasserted_arguments: record<severity: string, assert_self: bool, require_ref: bool, exceptions: list<string>>, unasserted_returns: record<severity: string, assert_self: bool, require_ref: bool>, missing_returns: record<severity: string>, reserved_identifiers: record<severity: string, reserved: list<string>>, bad_syntax: record<severity: string>>>] {
+def parse_config [data: record<exclude: list<string>, abort_functions: list<string>, rules: record<unasserted_arguments: record<severity: string, assert_self: bool, require_ref: bool, exceptions: list<string>>, unasserted_returns: record<severity: string, assert_self: bool, require_ref: bool>, missing_returns: record<severity: string>, reserved_identifiers: record<severity: string, reserved: list<string>>, bad_syntax: record<severity: string>>>] {
     return $data
 }
 
@@ -152,7 +153,6 @@ def lint_file [config: record, issues_file: path] {
 }
 
 const QA_ASSERT_REGEX = '^qa.assert';
-const QA_ABORT_REGEX = '^qa.abort(\s+|$)';
 const QA_VARNAME_REGEX = '^qa.assert(?:\w+)?\s*\(?\s*';
 const QA_REF_VARNAME_REGEX = $QA_VARNAME_REGEX + '@\s*';
 const RETURN_REGEX = '^return'
@@ -247,7 +247,7 @@ def check_funcdef [config: record, lines: list<string>, i: int, line: string, is
             }
 
             # No need to check further if we hit an abort
-            if $line =~ $QA_ABORT_REGEX {
+            if ($line | is-abort $config) {
                 break
             }
 
@@ -321,7 +321,7 @@ def check_returns [config: record, lines: list<string>, i: int, line: string, is
         }
 
         # No need to check further if we hit an abort
-        if $line =~ $QA_ABORT_REGEX {
+        if ($line | is-abort $config) {
             break
         }
 
@@ -363,7 +363,7 @@ def check_missing_returns [config: record, lines: list<string>, i: int, line: st
         }
 
         # No need to check further if we hit an abort
-        if $line =~ $QA_ABORT_REGEX {
+        if ($line | is-abort $config) {
             break
         }
 
@@ -432,12 +432,17 @@ def is-meaningless []: string -> bool {
   return (($in | is-empty) or ($in | str starts-with "//"))
 }
 
+def is-abort [config: record]: string -> bool {
+    let line = $in
+    return ($config.abort_functions | any {|it| $line | str starts-with $it })
+}
+
 export def 'merge deep' [other: any]: any -> any {
   let self = $in
   def type [] { describe | split row < | get 0 }
   match [($self | type) ($other | type)] {
     [record record] => { merge record $self $other }
-    [list list] => { $self ++ $other }
+    [list list] => { merge list $self $other }
     [_ nothing] => $self
     _ => $other
   }
@@ -450,4 +455,8 @@ def 'merge record' [self: record other: record]: nothing -> record {
     { key: $key val: ($self | value | merge deep ($other | value)) }
   }
   $table | transpose --header-row --as-record
+}
+
+def 'merge list' [self: list other: list]: nothing -> list {
+    $self ++ ($other | where {|it| $it not-in $self})
 }

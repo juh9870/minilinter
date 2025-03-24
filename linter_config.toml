@@ -1,5 +1,13 @@
 # Files to exclude from linting
 exclude = [""]
+# Which functions are considered to abort the execution of the script
+# Encountering these functions disables some rules, eg. unasserted_arguments,
+# missing_returns, and unasserted_returns
+#
+# Only add functions to this list if the abort is immediate and unconditional
+abort_functions = [
+    "qa.abort",
+]
 
 [rules.unasserted_arguments]
 # Severity of the rule. Can be "warn" or "error"
