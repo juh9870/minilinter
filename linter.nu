@@ -152,7 +152,7 @@ def lint_file [config: record, issues_file: path] {
 }
 
 const QA_ASSERT_REGEX = '^qa.assert';
-const QA_ABORT_REGEX = '^qa.abort';
+const QA_ABORT_REGEX = '^qa.abort(\s+|$)';
 const QA_VARNAME_REGEX = '^qa.assert(?:\w+)?\s*\(?\s*';
 const QA_REF_VARNAME_REGEX = $QA_VARNAME_REGEX + '@\s*';
 const RETURN_REGEX = '^return'
