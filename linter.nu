@@ -176,7 +176,9 @@ def check_assignment [config: record, lines: list<string>, i: int, line: string,
 
     if $varname in $config.rules.reserved_identifiers.reserved {
         let code = $"reserved_identifiers\(($varname)\)"
-        report_issue $issues_file $i $"variable `($varname)` is a reserved identifier" $code $config.rules.reserved_identifiers.severity
+        if $code not-in $allows {
+            report_issue $issues_file $i $"variable `($varname)` is a reserved identifier" $code $config.rules.reserved_identifiers.severity
+        }
     }
     if $varname in $SYNTAX_RESERVED_WORDS {
         let code = $"bad_syntax.reserved_keyword_assignment\(($varname)\)"
@@ -219,7 +221,10 @@ def check_funcdef [config: record, lines: list<string>, i: int, line: string, is
         }
         if $arg in $config.rules.reserved_identifiers.reserved {
             let code = $"reserved_identifiers\(($arg)\)"
-            report_issue $issues_file $i $"argument `($arg)` is a reserved identifier" $code $config.rules.reserved_identifiers.severity
+
+            if $code not-in $allows {
+                report_issue $issues_file $i $"argument `($arg)` is a reserved identifier" $code $config.rules.reserved_identifiers.severity
+            }
         }
 
 
@@ -273,7 +278,9 @@ def check_returns [config: record, lines: list<string>, i: int, line: string, is
     let return_data = $line | parse -r $RETURN_VARIABLE_REGEX
     if ($return_data | is-empty) {
         let code = $"unasserted_returns.not_a_variable"
-        report_issue $issues_file $i $"return statement is not a plain variable return" $code $config.rules.unasserted_returns.severity
+        if $code not-in $allows {
+            report_issue $issues_file $i $"return statement is not a plain variable return" $code $config.rules.unasserted_returns.severity
+        }
         return
     }
 
