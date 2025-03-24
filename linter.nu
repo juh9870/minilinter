@@ -152,6 +152,7 @@ def lint_file [config: record, issues_file: path] {
 }
 
 const QA_ASSERT_REGEX = '^qa.assert';
+const QA_ABORT_REGEX = '^qa.abort';
 const QA_VARNAME_REGEX = '^qa.assert(?:\w+)?\s*\(?\s*';
 const QA_REF_VARNAME_REGEX = $QA_VARNAME_REGEX + '@\s*';
 const RETURN_REGEX = '^return'
@@ -245,6 +246,11 @@ def check_funcdef [config: record, lines: list<string>, i: int, line: string, is
                 continue
             }
 
+            # No need to check further if we hit an abort
+            if $line =~ $QA_ABORT_REGEX {
+                break
+            }
+
             if $line !~ $QA_ASSERT_REGEX {
                 let code = $"unasserted_arguments\(($arg)\)"
                 if $code not-in $allows {
@@ -314,6 +320,11 @@ def check_returns [config: record, lines: list<string>, i: int, line: string, is
             continue
         }
 
+        # No need to check further if we hit an abort
+        if $line =~ $QA_ABORT_REGEX {
+            break
+        }
+
         if $line !~ $QA_ASSERT_REGEX {
             let code = $"unasserted_returns\(($varname)\)"
             if $code not-in $allows {
@@ -349,6 +360,11 @@ def check_missing_returns [config: record, lines: list<string>, i: int, line: st
         let line = $lines | get $j
         if ($line | is-meaningless) {
             continue
+        }
+
+        # No need to check further if we hit an abort
+        if $line =~ $QA_ABORT_REGEX {
+            break
         }
 
         if $line !~ $RETURN_REGEX {
