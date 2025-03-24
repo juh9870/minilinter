@@ -118,6 +118,7 @@ const QA_VARNAME_REGEX = '^qa.assert(?:\w+)?\s*\(?\s*';
 const QA_REF_VARNAME_REGEX = $QA_VARNAME_REGEX + '@\s*';
 const RETURN_REGEX = '^return'
 const RETURN_VARIABLE_REGEX = '^return\s*(?:@\s*)?(?<varname>\w+)$'
+const RETURN_REF_VARIABLE_REGEX = '^return\s*@\s*(?<varname>\w+)$'
 
 def check_funcdef [config: record, lines: list<string>, i: int, line: string, issues_file: path, allows: list<string>] {
     const fn_regex = 'function\s*\(\s*(?<args>[^)]+?)\s*\)'
@@ -209,12 +210,21 @@ def check_returns [config: record, lines: list<string>, i: int, line: string, is
         return
     }
 
+    if $varname == "null" {
+        return
+    }
+
     if (not $config.rules.unasserted_returns.assert_self) and ($varname == "self") {
         return
     }
 
-    if $varname == "null" {
-        return
+    if $line !~ $RETURN_REF_VARIABLE_REGEX {
+        if $config.rules.unasserted_returns.require_ref {
+            let code = $"unasserted_returns.return_not_by_ref\(($varname)\)"
+            if $code not-in $allows {
+                report_issue $issues_file $i $"variable `($varname)` is not returned by reference" $code $config.rules.unasserted_returns.severity $"change return to use variable by reference: @($varname)"
+            }
+        }
     }
 
     for j in (0..($i - 1) | each {} | reverse) {
